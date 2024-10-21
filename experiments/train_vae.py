@@ -39,6 +39,10 @@ if __name__ == '__main__':
     check_val_every_n_epoch = model_args.pop('check_val_every_n_epoch')
     if check_val_every_n_epoch <= 0:
         check_val_every_n_epoch = 1 if not args.cluster else 5
+
+    print(model_class, data_loaders['train'], datasets['train'].action_size(), datasets['train'].get_causal_var_info(), model_args)
+ 
+
     train_model(model_class=model_class,
                 train_loader=data_loaders['train'],
                 val_loader=data_loaders['val_seq'],

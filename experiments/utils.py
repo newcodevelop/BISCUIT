@@ -13,7 +13,7 @@ from shutil import copyfile
 
 import sys
 sys.path.append('../')
-from experiments.datasets import VoronoiDataset, CausalWorldDataset, iTHORDataset
+from experiments.datasets import VoronoiDataset, CausalWorldDataset, iTHORDataset, TVSummDataset, get_transforms
 
 def get_device():
     return torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
@@ -53,20 +53,37 @@ def load_datasets(args):
         data_name = 'ithor' + args.data_dir.split('ithor')[-1].replace('/','')
         DataClass = iTHORDataset
         dataset_args = {}
+    elif 'tvsumm' in args.data_dir:
+        data_name = 'tvsumm'
+        DataClass = TVSummDataset
+        dataset_args = {}
     else:
         assert False, f'Unknown data class for {args.data_dir}'
     if hasattr(args, 'try_encodings'):
         dataset_args['try_encodings'] = args.try_encodings
-    train_dataset = DataClass(
-        data_folder=args.data_dir, split='train', single_image=False, triplet=False, seq_len=args.seq_len, cluster=args.cluster, **dataset_args)
-    val_dataset = DataClass(
-        data_folder=args.data_dir, split='val_indep', single_image=True, triplet=False, return_latents=True, cluster=args.cluster, **dataset_args)
-    val_seq_dataset = DataClass(
-        data_folder=args.data_dir, split='val', single_image=False, triplet=False, seq_len=args.seq_len, cluster=args.cluster, **dataset_args)
-    test_dataset = DataClass(
-        data_folder=args.data_dir, split='test_indep', single_image=True, triplet=False, return_latents=True, cluster=args.cluster, **dataset_args)
-    test_seq_dataset = DataClass(
-        data_folder=args.data_dir, split='test', single_image=False, triplet=False, seq_len=args.seq_len, cluster=args.cluster, **dataset_args)
+    
+    if 'tvsumm' in args.data_dir:
+        transform = get_transforms()
+        print(args.data_dir)
+        train_dataset = TVSummDataset(args.data_dir, transform=transform)
+        val_dataset = train_dataset
+        val_seq_dataset = train_dataset
+        test_dataset = train_dataset
+        test_seq_dataset = train_dataset
+
+    
+    else:
+        train_dataset = DataClass(
+            data_folder=args.data_dir, split='train', single_image=False, triplet=False, seq_len=args.seq_len, cluster=args.cluster, **dataset_args)
+        val_dataset = DataClass(
+            data_folder=args.data_dir, split='val_indep', single_image=True, triplet=False, return_latents=True, cluster=args.cluster, **dataset_args)
+        val_seq_dataset = DataClass(
+            data_folder=args.data_dir, split='val', single_image=False, triplet=False, seq_len=args.seq_len, cluster=args.cluster, **dataset_args)
+        test_dataset = DataClass(
+            data_folder=args.data_dir, split='test_indep', single_image=True, triplet=False, return_latents=True, cluster=args.cluster, **dataset_args)
+        test_seq_dataset = DataClass(
+            data_folder=args.data_dir, split='test', single_image=False, triplet=False, seq_len=args.seq_len, cluster=args.cluster, **dataset_args)
+
     train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size,
                                    shuffle=True, pin_memory=True, drop_last=True, num_workers=args.num_workers)
     val_seq_loader = data.DataLoader(val_seq_dataset, batch_size=args.batch_size,
@@ -103,16 +120,24 @@ def load_datasets(args):
         for key in ['return_robot_state', 'return_targets']:
             if key in dataset_args:
                 dataset_args.pop(key)
-        action_dataset = DataClass(data_folder=args.data_dir,
-                                   split='val',
-                                   return_robot_state=True,
-                                   triplet=False,
-                                   return_targets=True,
-                                   **dataset_args
-                                   )
-        action_loader = data.DataLoader(action_dataset,
+        if 'tvsumm' in args.data_dir:
+            transform = get_transforms()
+            print(args.data_dir)
+            action_dataset = TVSummDataset(args.data_dir, transform=transform)
+            action_loader = data.DataLoader(action_dataset,
                                         batch_size=args.batch_size,
-                                        shuffle=False)
+                                     shuffle=False)
+        else:
+            action_dataset = DataClass(data_folder=args.data_dir,
+                                    split='val',
+                                    return_robot_state=True,
+                                    triplet=False,
+                                    return_targets=True,
+                                    **dataset_args
+                                    )
+            action_loader = data.DataLoader(action_dataset,
+                                            batch_size=args.batch_size,
+                                            shuffle=False)
         datasets['action'] = action_dataset
         data_loaders['action'] = action_loader
 
@@ -148,7 +173,7 @@ def train_model(model_class, train_loader, val_loader,
                 data_dir=None,
                 compile=False,
                 **kwargs):
-    torch.set_float32_matmul_precision('medium')
+    #torch.set_float32_matmul_precision('medium')
     trainer_args = {}
     if root_dir is None or root_dir == '':
         root_dir = os.path.join('checkpoints/', model_class.__name__)

@@ -152,11 +152,22 @@ def initialize_environment(seed:int=42):
     np.random.seed(seed)
     random.seed(seed)
 
+    print('seed', seed)
+
+    
     controller = Controller(width=RESOLUTION, 
                             height=RESOLUTION, 
                             gridSize=0.1, 
                             platform=CloudRendering,
-                            renderInstanceSegmentation=True)
+                           renderInstanceSegmentation=True)
+    
+    # controller = Controller(width=RESOLUTION, 
+    #                         height=RESOLUTION, 
+    #                         gridSize=0.1, 
+    #                         headless=True, 
+    #                         platform=CloudRendering)
+    
+    print(controller)
 
     # Move the agent to the starting position
     event = controller.step(action="Stand")

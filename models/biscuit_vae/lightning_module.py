@@ -73,6 +73,7 @@ class BISCUITVAE(pl.LightningModule):
         if self.hparams.decoder_latents < 0:
             self.hparams.decoder_latents = self.hparams.num_latents
 
+        self.hparams.action_size = 3 # new line added
         # Encoder-Decoder init
         if self.hparams.no_encoder_decoder:
             self.encoder, self.decoder = nn.Identity(), nn.Identity()
@@ -102,6 +103,16 @@ class BISCUITVAE(pl.LightningModule):
                                              c_hid=self.hparams.c_hid,
                                              num_latents=self.hparams.num_latents)
             else:
+                print('hyperparams are:*******')
+                print('num_latents enc', self.hparams.num_latents)
+                print('num_latents dec', self.hparams.decoder_latents)
+                print('c_id', self.hparams.c_hid)
+                print('c_in', self.hparams.c_in)
+                print('act fn', act_fn_func)
+                print('decode blocks', self.hparams.decoder_num_blocks)
+
+                print(0/0)
+
                 self.encoder = Encoder(num_latents=self.hparams.num_latents,
                                           c_hid=self.hparams.c_hid,
                                           c_in=self.hparams.c_in,
@@ -123,6 +134,7 @@ class BISCUITVAE(pl.LightningModule):
                                                  extra_args=kwargs)
 
         if self.hparams.use_flow_prior:
+            print('using flow prior')
             self.flow = AutoregNormalizingFlow(self.hparams.num_latents,
                                                num_flows=4,
                                                act_fn=nn.SiLU,
@@ -134,6 +146,8 @@ class BISCUITVAE(pl.LightningModule):
 
     def forward(self, x):
         # Full encoding and decoding of samples
+        # print(x)
+        # print(0/0)
         z_mean, z_logstd = self.encoder(x)
         z_sample = z_mean + torch.randn_like(z_mean) * z_logstd.exp()
         x_rec = self.decoder(z_sample)
@@ -158,30 +172,67 @@ class BISCUITVAE(pl.LightningModule):
         return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'step'}]
 
     def _get_loss(self, batch, mode='train'):
+        
         """ Main training method for calculating the loss """
         if len(batch) == 2:
             imgs, action = batch
             labels = imgs
         else:
             imgs, labels, action = batch
+        
+        print(imgs.shape, action.shape, labels.shape, imgs.flatten(0, 1).shape)
+        #print(batch)
+        print('action', action)
+
+        action = torch.randn(4,1,self.hparams.action_size).to('cuda') # 4 is the batch size, 1 is the intermediate size.
+
+        print('new action', action.shape)
+
+        
         # En- and decode every element of the sequence, except first element no decoding
         z_mean, z_logstd = self.encoder(imgs.flatten(0, 1))
+
+        print('z_mean, z_logstd', z_mean.shape, z_logstd.shape)
+
+        
+
         z_sample = z_mean + torch.randn_like(z_mean) * z_logstd.exp()
         decoder_inp = z_sample.unflatten(0, imgs.shape[:2])[:,1:].flatten(0, 1)
+
+        print('decoder inp shape', decoder_inp.shape)
+
         if self.hparams.decoder_latents != self.hparams.num_latents:
             decoder_inp = torch.cat([decoder_inp, action.flatten(0, 1)], dim=-1)
+
+        print('decoder inp shape', decoder_inp.shape)
+
+        
         x_rec = self.decoder(decoder_inp)
         z_sample, z_mean, z_logstd, x_rec = [t.unflatten(0, (imgs.shape[0], -1)) for t in [z_sample, z_mean, z_logstd, x_rec]]
 
+        print(z_sample.shape, z_mean.shape, z_logstd.shape, x_rec.shape)
+
+        
+
         if self.hparams.use_flow_prior:
+            print('here1')
             num_samples = 4
             z_sample = z_mean[:,:,None] + torch.randn_like(z_mean[:,:,None].expand(-1, -1, num_samples, -1)) * z_logstd.exp()[:,:,None]
+            print('z_sample',z_sample.shape)
             z_sample = torch.cat([z_mean[:,0:1,None].expand(-1, -1, z_sample.shape[2], -1),
                                   z_sample[:,1:]], dim=1)
+            print('z_sample',z_sample.shape)
+            print('z_mean',z_mean[:,:,None].shape)
+            print('z_logstd',z_logstd[:,:,None].shape)
             init_nll = -gaussian_log_prob(z_mean[:,:,None], z_logstd[:,:,None], z_sample).mean(dim=2).sum(dim=-1)
+            print(z_sample.flatten(0, -2).shape)
             z_sample, ldj = self.flow(z_sample.flatten(0, -2))
+            print(z_sample.shape, ldj.shape)
             z_sample = z_sample.unflatten(0, (imgs.shape[0], -1, num_samples))
             ldj = ldj.unflatten(0, (imgs.shape[0], -1, num_samples)).mean(dim=2)
+
+            print(z_sample[:,1:].flatten(0, 1).shape, action.flatten(0, 1).shape, z_sample[:,:-1].flatten(0, 1).shape)
+
             out_nll = self.prior_t1.sample_based_nll(z_t1=z_sample[:,1:].flatten(0, 1), 
                                                      action=action.flatten(0, 1), 
                                                      z_t=z_sample[:,:-1].flatten(0, 1))
@@ -198,6 +249,7 @@ class BISCUITVAE(pl.LightningModule):
             kld = -(p_z_x[:,1:] - p_z)
             kld_t1_all = kld.unflatten(0, (imgs.shape[0], -1)).sum(dim=1)
         else:
+            print('here2')
             # Calculate KL divergence between every pair of frames
             kld_t1_all = self.prior_t1.kl_divergence(z_t=z_mean[:,:-1].flatten(0, 1), 
                                                      action=action.flatten(0, 1), 
@@ -213,6 +265,8 @@ class BISCUITVAE(pl.LightningModule):
                     self.log(f'{mode}_prior_{key}', val)
             kld_t1_all = kld_t1_all.unflatten(0, (imgs.shape[0], -1)).sum(dim=1)
         
+        #print(0/0)
+
         # Calculate reconstruction loss
         if isinstance(self.decoder, nn.Identity):
             rec_loss = z_mean.new_zeros(imgs.shape[0], imgs.shape[1])
@@ -222,6 +276,10 @@ class BISCUITVAE(pl.LightningModule):
         # Combine to full loss
         loss = (kld_t1_all + rec_loss.sum(dim=1)).mean()
         loss = loss / (imgs.shape[1] - 1)
+
+        print('Loss', loss)
+
+        print('*'*20)
 
         # Logging
         self.log(f'{mode}_kld_t1', kld_t1_all.mean() / (imgs.shape[1]-1))

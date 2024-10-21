@@ -823,3 +823,210 @@ class iTHORDataset(data.Dataset):
             returns += [lat]
 
         return tuple(returns) if len(returns) > 1 else returns[0]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import os
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torchvision.transforms as transforms
+from torchvision.io import read_video
+from torch.utils.data import Dataset, DataLoader
+#from imagebind.models import imagebind_model
+from torchvision.transforms import ToPILImage
+from torchvision.io import VideoReader
+import cv2
+
+
+# # ImageBind encoder for frames
+# class ImageBindEncoder(nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#         self.model = imagebind_model(pretrained=True)  # Load a pretrained ImageBind model
+
+#     def forward(self, frame):
+#         # Pass frame to ImageBind model
+#         embeddings = self.model({'image': frame})
+#         return embeddings['image']
+
+# # Custom dataset for a directory of videos
+# class VideoDataset(Dataset):
+#     def __init__(self, video_dir, transform=None):
+#         self.video_dir = video_dir
+#         self.transform = transform
+#         self.video_files = [os.path.join(video_dir, file) for file in os.listdir(video_dir) if file.endswith(('.mp4', '.avi'))]
+
+#     def __len__(self):
+#         return len(self.video_files)
+
+#     def __getitem__(self, idx):
+#         video_path = self.video_files[idx]
+#         frames, _, _ = read_video(video_path, pts_unit='sec')  # Read the video frames
+#         frames = frames.permute(0, 3, 1, 2)  # Convert to [T, C, H, W]
+
+#         print(frames.shape)
+        
+#         if self.transform:
+#             frames = torch.stack([self.transform(frame) for frame in frames])
+
+#         return frames
+
+# Preprocessing: Resize and normalize the frames
+# def get_transforms():
+#     return transforms.Compose([
+#         ToPILImage(),  # Convert tensor to PIL image
+#         transforms.Resize((224, 224)),  # Resize the frame to 224x224
+#         transforms.ToTensor(),  # Convert back to tensor
+#         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # Normalize
+#     ])
+
+
+
+
+
+
+
+def find_box(video_dir):
+    sequence_length = 1
+    box_sizes = []
+    video_files = [os.path.join(video_dir, file) for file in os.listdir(video_dir) if file.endswith(('.mp4', '.avi'))]
+    
+    for video_file in video_files:
+        # Use cv2 to read video metadata and extract frame count
+        cap = cv2.VideoCapture(video_file)
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # Get total number of frames
+        cap.release()  # Release the video capture object
+
+        # Calculate the number of frame sequences for this video
+        box_sizes.append(max(0, (frame_count - sequence_length + 1)))
+
+    return box_sizes
+    
+boxes = find_box('../data/tvsumm/ydata-tvsum50-v1_1/video/')
+
+print(len(boxes))
+
+import os
+import torch
+from torch.utils.data import Dataset
+from torchvision.io import read_video
+
+class TVSummDataset(Dataset):
+    VAR_INFO = OrderedDict({})
+    def __init__(self, video_dir, sequence_length=1, transform=None):
+        self.video_dir = video_dir
+        self.transform = transform
+        self.sequence_length = sequence_length  # Number of consecutive frames
+        self.video_files = [os.path.join(video_dir, file) for file in os.listdir(video_dir) if file.endswith(('.mp4', '.avi'))]
+
+    def __len__(self):
+       
+
+        total_sequences = 0
+        for video_file in self.video_files:
+            # Use cv2 to read video metadata and extract frame count
+            cap = cv2.VideoCapture(video_file)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # Get total number of frames
+            cap.release()  # Release the video capture object
+    
+            # Calculate the number of frame sequences for this video
+            total_sequences += frame_count 
+
+        return total_sequences
+
+    def action_size(self):
+        return 2
+
+    def num_labels(self):
+        return -1
+
+    def num_vars(self):
+        return 0
+
+    def get_causal_var_info(self):
+        return TVSummDataset.VAR_INFO
+
+    
+    
+
+    def __getitem__(self, idx):
+        #find the video no and the local frame no.
+
+        cumulative_sum = 0
+        for i, size in enumerate(boxes):
+            next_cumulative_sum = cumulative_sum + size
+            # Check if the index falls within the current box
+            if cumulative_sum <= idx < next_cumulative_sum:
+                # Local index within the identified box
+                local_index = idx - cumulative_sum
+                #return i, local_index  # Return box number and local index
+                break
+            cumulative_sum = next_cumulative_sum
+        
+        # Load the correct video
+        video_path = self.video_files[i]
+
+
+        # Using VideoReader to load frames as needed
+        video_reader = VideoReader(video_path, "video")
+        frames = []
+        
+        # Select a starting point for the frame sequence
+        for j, frame in enumerate(video_reader):
+            
+            if j==local_index:
+                frames.append(frame['data'])
+                break
+        
+       
+        frames = torch.stack(frames)  # Convert to [T, C, H, W]
+
+    
+
+        if self.transform:
+            frames = torch.stack([self.transform(frame) for frame in frames])
+
+        
+        
+        return frames
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def get_transforms():
+    return transforms.Compose(
+        [   ToPILImage(),
+            transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=(0.48145466, 0.4578275, 0.40821073),
+                std=(0.26862954, 0.26130258, 0.27577711),
+            )])
+
+
+
+
