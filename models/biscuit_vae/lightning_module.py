@@ -111,7 +111,7 @@ class BISCUITVAE(pl.LightningModule):
                 print('act fn', act_fn_func)
                 print('decode blocks', self.hparams.decoder_num_blocks)
 
-                print(0/0)
+                
 
                 self.encoder = Encoder(num_latents=self.hparams.num_latents,
                                           c_hid=self.hparams.c_hid,
@@ -119,6 +119,17 @@ class BISCUITVAE(pl.LightningModule):
                                           width=self.hparams.img_width,
                                           act_fn=act_fn_func,
                                           variational=True)
+                self.phi = Encoder(num_latents=self.hparams.num_latents,
+                                          c_hid=self.hparams.c_hid,
+                                          c_in=self.hparams.c_in,
+                                          width=self.hparams.img_width,
+                                          act_fn=act_fn_func,
+                                          variational=True)
+
+                self.proj = nn.Linear(40,3)
+
+                #self.proj1 = nn.Linear(2,3)
+                
                 self.decoder = Decoder(num_latents=self.hparams.decoder_latents,
                                           c_hid=self.hparams.c_hid,
                                           c_out=self.hparams.c_in,
@@ -148,6 +159,7 @@ class BISCUITVAE(pl.LightningModule):
         # Full encoding and decoding of samples
         # print(x)
         # print(0/0)
+
         z_mean, z_logstd = self.encoder(x)
         z_sample = z_mean + torch.randn_like(z_mean) * z_logstd.exp()
         x_rec = self.decoder(z_sample)
@@ -155,7 +167,13 @@ class BISCUITVAE(pl.LightningModule):
 
     def encode(self, x, random=True):
         # Map input to encoding, e.g. for correlation metrics
-        z_mean, z_logstd = self.encoder(x)
+       
+        try:
+            z_mean, z_logstd = self.encoder(x)
+        except:
+            x = torch.stack([x[i,0,:,:,:] for i in range(x.shape[0])]).squeeze(dim=1)
+            #print('x', x.shape)
+            z_mean, z_logstd = self.encoder(x)
         if random:
             z_sample = z_mean + torch.randn_like(z_mean) * z_logstd.exp()
         else:
@@ -180,58 +198,79 @@ class BISCUITVAE(pl.LightningModule):
         else:
             imgs, labels, action = batch
         
-        print(imgs.shape, action.shape, labels.shape, imgs.flatten(0, 1).shape)
+        
+        
+        #print(imgs.shape, action.shape, labels.shape, imgs.flatten(0, 1).shape)
+
+        #print(0/0)
         #print(batch)
-        print('action', action)
+        #print('action', action)
 
-        action = torch.randn(4,1,self.hparams.action_size).to('cuda') # 4 is the batch size, 1 is the intermediate size.
+        #action = torch.randn(4,1,self.hparams.action_size).to('cuda') # 4 is the batch size, 1 is the intermediate size.
 
-        print('new action', action.shape)
+        #print('new action', action.shape)
 
         
         # En- and decode every element of the sequence, except first element no decoding
+
+        p1_mean, p1_std = self.phi(imgs[:,0,:,:,:]) 
+        p2_mean, p2_std = self.phi(imgs[:,1,:,:,:])
+
+        p_mean = p1_mean-p2_mean
+        p_std = p1_std-p2_std
+
+        p_sample = p_mean + torch.randn_like(p_mean) * p_std.exp()
+
+        action = self.proj(p_sample).unsqueeze(dim=1)
+
+        #print(p_sample.shape, action.shape)
+        # print(0/0)
+
+
         z_mean, z_logstd = self.encoder(imgs.flatten(0, 1))
 
-        print('z_mean, z_logstd', z_mean.shape, z_logstd.shape)
+        #print('z_mean, z_logstd', z_mean.shape, z_logstd.shape)
+
+        
 
         
 
         z_sample = z_mean + torch.randn_like(z_mean) * z_logstd.exp()
         decoder_inp = z_sample.unflatten(0, imgs.shape[:2])[:,1:].flatten(0, 1)
 
-        print('decoder inp shape', decoder_inp.shape)
+        #print('decoder inp shape', decoder_inp.shape)
 
         if self.hparams.decoder_latents != self.hparams.num_latents:
             decoder_inp = torch.cat([decoder_inp, action.flatten(0, 1)], dim=-1)
 
-        print('decoder inp shape', decoder_inp.shape)
+        #print('decoder inp shape', decoder_inp.shape)
 
         
         x_rec = self.decoder(decoder_inp)
         z_sample, z_mean, z_logstd, x_rec = [t.unflatten(0, (imgs.shape[0], -1)) for t in [z_sample, z_mean, z_logstd, x_rec]]
 
-        print(z_sample.shape, z_mean.shape, z_logstd.shape, x_rec.shape)
+        #print(z_sample.shape, z_mean.shape, z_logstd.shape, x_rec.shape)
 
         
 
         if self.hparams.use_flow_prior:
-            print('here1')
+            #print('here1')
             num_samples = 4
             z_sample = z_mean[:,:,None] + torch.randn_like(z_mean[:,:,None].expand(-1, -1, num_samples, -1)) * z_logstd.exp()[:,:,None]
-            print('z_sample',z_sample.shape)
+            #print('z_sample',z_sample.shape)
             z_sample = torch.cat([z_mean[:,0:1,None].expand(-1, -1, z_sample.shape[2], -1),
                                   z_sample[:,1:]], dim=1)
-            print('z_sample',z_sample.shape)
-            print('z_mean',z_mean[:,:,None].shape)
-            print('z_logstd',z_logstd[:,:,None].shape)
+            #print('z_sample',z_sample.shape)
+            #print('z_mean',z_mean[:,:,None].shape)
+            #print('z_logstd',z_logstd[:,:,None].shape)
             init_nll = -gaussian_log_prob(z_mean[:,:,None], z_logstd[:,:,None], z_sample).mean(dim=2).sum(dim=-1)
-            print(z_sample.flatten(0, -2).shape)
+            #print(z_sample.flatten(0, -2).shape)
             z_sample, ldj = self.flow(z_sample.flatten(0, -2))
-            print(z_sample.shape, ldj.shape)
+            #print(z_sample.shape, ldj.shape)
             z_sample = z_sample.unflatten(0, (imgs.shape[0], -1, num_samples))
             ldj = ldj.unflatten(0, (imgs.shape[0], -1, num_samples)).mean(dim=2)
 
-            print(z_sample[:,1:].flatten(0, 1).shape, action.flatten(0, 1).shape, z_sample[:,:-1].flatten(0, 1).shape)
+            #print(z_sample[:,1:].flatten(0, 1).shape, action.flatten(0, 1).shape, z_sample[:,:-1].flatten(0, 1).shape)
 
             out_nll = self.prior_t1.sample_based_nll(z_t1=z_sample[:,1:].flatten(0, 1), 
                                                      action=action.flatten(0, 1), 
@@ -249,7 +288,7 @@ class BISCUITVAE(pl.LightningModule):
             kld = -(p_z_x[:,1:] - p_z)
             kld_t1_all = kld.unflatten(0, (imgs.shape[0], -1)).sum(dim=1)
         else:
-            print('here2')
+            #print('here2')
             # Calculate KL divergence between every pair of frames
             kld_t1_all = self.prior_t1.kl_divergence(z_t=z_mean[:,:-1].flatten(0, 1), 
                                                      action=action.flatten(0, 1), 
@@ -288,6 +327,7 @@ class BISCUITVAE(pl.LightningModule):
         return loss
 
     def training_step(self, batch, batch_idx):
+        print('in the training step')
         loss = self._get_loss(batch, mode='train')
         self.log('train_loss', loss)
         return loss
@@ -308,16 +348,16 @@ class BISCUITVAE(pl.LightningModule):
         if 'last_target_assignment' in checkpoint['state_dict']:
             self.last_target_assignment.data = checkpoint['state_dict']['last_target_assignment']
 
-    @staticmethod
-    def get_callbacks(exmp_inputs=None, dataset=None, cluster=False, correlation_dataset=None, correlation_test_dataset=None, action_data_loader=None, **kwargs):
-        callbacks = [LearningRateMonitor('step')]
-        if exmp_inputs is not None:
-            img_callback = ImageLogCallback(exmp_inputs, dataset, every_n_epochs=10 if not cluster else 50, cluster=cluster)
-            callbacks.append(img_callback)
-        if correlation_dataset is not None:
-            corr_callback = PermutationCorrelationMetricsLogCallback(correlation_dataset, cluster=cluster, test_dataset=correlation_test_dataset)
-            callbacks.append(corr_callback)
-        if action_data_loader is not None:
-            actionvq_callback = InteractionVisualizationCallback(action_data_loader=action_data_loader)
-            callbacks.append(actionvq_callback)
-        return callbacks
+    # @staticmethod
+    # def get_callbacks(exmp_inputs=None, dataset=None, cluster=False, correlation_dataset=None, correlation_test_dataset=None, action_data_loader=None, **kwargs):
+    #     callbacks = [LearningRateMonitor('step')]
+    #     if exmp_inputs is not None:
+    #         img_callback = ImageLogCallback(exmp_inputs, dataset, every_n_epochs=10 if not cluster else 50, cluster=cluster)
+    #         callbacks.append(img_callback)
+    #     if correlation_dataset is not None:
+    #         corr_callback = PermutationCorrelationMetricsLogCallback(correlation_dataset, cluster=cluster, test_dataset=correlation_test_dataset)
+    #         callbacks.append(corr_callback)
+    #     if action_data_loader is not None:
+    #         actionvq_callback = InteractionVisualizationCallback(action_data_loader=action_data_loader)
+    #         callbacks.append(actionvq_callback)
+    #     return callbacks

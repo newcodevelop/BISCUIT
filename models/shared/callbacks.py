@@ -200,6 +200,8 @@ class CorrelationMetricsLogCallback(pl.Callback):
             for inps, latents in train_loader:
                 inps = inps.to(device)
                 latents = latents.to(device)
+                print(inps.shape, latents.shape)
+                print(0/0)
                 inps, latents = self._prepare_input(inps, target_assignment, latents)
                 loss = encoder._get_loss([inps, latents], mode=None)
                 optimizer.zero_grad()
