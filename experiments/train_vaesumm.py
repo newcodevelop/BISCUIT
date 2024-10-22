@@ -25,6 +25,14 @@ if __name__ == '__main__':
     print(args)
 
     print(datasets)
+    print(len(datasets['train']), len(data_loaders['train']))
+  
+    for i in data_loaders['train']:
+        print(i)
+        print(len(i))
+        print(i[0].shape, i[1].shape)
+        print('hehe'*10)
+        break
 
     model_args['data_folder'] = [s for s in args.data_dir.split('/') if len(s) > 0][-1]
     model_args['img_width'] = 256

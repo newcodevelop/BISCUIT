@@ -914,9 +914,53 @@ def find_box(video_dir):
 
     return box_sizes
     
-boxes = find_box('../data/tvsumm/ydata-tvsum50-v1_1/video/')
+#boxes = find_box('../data/tvsumm/ydata-tvsum50-v1_1/video/')
 
-print(len(boxes))
+def get_transforms():
+    return transforms.Compose(
+        [   ToPILImage(),
+            transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
+            transforms.CenterCrop(256),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=(0.48145466, 0.4578275, 0.40821073),
+                std=(0.26862954, 0.26130258, 0.27577711),
+            )])
+
+from tqdm import tqdm
+def create_frames(video_dir):
+     video_files = [os.path.join(video_dir, file) for file in os.listdir(video_dir) if file.endswith(('.mp4', '.avi'))][48:50]
+     all_frames = []
+     for video_path in tqdm(video_files):
+        video_reader = VideoReader(video_path, "video")
+        frames = []
+        
+        # Select a starting point for the frame sequence
+        for j, frame in enumerate(video_reader):
+            
+            
+            frames.append(frame['data'])
+                
+        
+    
+        frames = torch.stack(frames)  # Convert to [T, C, H, W]
+        frames = torch.stack([get_transforms()(frame) for frame in frames])
+
+        all_frames.append(frames)
+     return torch.cat(all_frames, dim=0)
+       
+     
+        
+# af = create_frames('../data/tvsumm/ydata-tvsum50-v1_1/video/')
+
+
+
+# torch.save(af, './all_frames_tvsumm.pt')
+
+
+
+#np.save('./box.npy', np.array(boxes))
+
 
 import os
 import torch
@@ -925,26 +969,39 @@ from torchvision.io import read_video
 
 class TVSummDataset(Dataset):
     VAR_INFO = OrderedDict({})
-    def __init__(self, video_dir, sequence_length=1, transform=None):
+    def __init__(self, video_dir, sequence_length=2, transform=None):
         self.video_dir = video_dir
         self.transform = transform
         self.sequence_length = sequence_length  # Number of consecutive frames
         self.video_files = [os.path.join(video_dir, file) for file in os.listdir(video_dir) if file.endswith(('.mp4', '.avi'))]
+        self.box_sizes = np.load('./box.npy')
+        self.af = torch.load('./all_frames_tvsumm.pt')
+        # self.box_sizes = []
+        # for video_file in self.video_files:
+        #     # Use cv2 to read video metadata and extract frame count
+        #     cap = cv2.VideoCapture(video_file)
+        #     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # Get total number of frames
+        #     cap.release()  # Release the video capture object
+
+        #     # Calculate the number of frame sequences for this video
+        #     self.box_sizes.append(max(0, (frame_count - sequence_length + 1)))
 
     def __len__(self):
+        #af = 
+        return self.af.shape[0]-1
        
 
-        total_sequences = 0
-        for video_file in self.video_files:
-            # Use cv2 to read video metadata and extract frame count
-            cap = cv2.VideoCapture(video_file)
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # Get total number of frames
-            cap.release()  # Release the video capture object
+        # total_sequences = 0
+        # for video_file in self.video_files:
+        #     # Use cv2 to read video metadata and extract frame count
+        #     cap = cv2.VideoCapture(video_file)
+        #     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # Get total number of frames
+        #     cap.release()  # Release the video capture object
     
-            # Calculate the number of frame sequences for this video
-            total_sequences += frame_count 
+        #     # Calculate the number of frame sequences for this video
+        #     total_sequences += frame_count 
 
-        return total_sequences
+        # return total_sequences
 
     def action_size(self):
         return 2
@@ -962,45 +1019,50 @@ class TVSummDataset(Dataset):
     
 
     def __getitem__(self, idx):
+
+        returns = [self.af[idx:idx+2,:,:,:], torch.randn(1,2)] # the 2nd entry is fake regime variable, which will be updated later.
+
+        return tuple(returns)
+
         #find the video no and the local frame no.
 
-        cumulative_sum = 0
-        for i, size in enumerate(boxes):
-            next_cumulative_sum = cumulative_sum + size
-            # Check if the index falls within the current box
-            if cumulative_sum <= idx < next_cumulative_sum:
-                # Local index within the identified box
-                local_index = idx - cumulative_sum
-                #return i, local_index  # Return box number and local index
-                break
-            cumulative_sum = next_cumulative_sum
+        # cumulative_sum = 0
+        # for i, size in enumerate(self.box_sizes):
+        #     next_cumulative_sum = cumulative_sum + size
+        #     # Check if the index falls within the current box
+        #     if cumulative_sum <= idx < next_cumulative_sum:
+        #         # Local index within the identified box
+        #         local_index = idx - cumulative_sum
+        #         #return i, local_index  # Return box number and local index
+        #         break
+        #     cumulative_sum = next_cumulative_sum
         
-        # Load the correct video
-        video_path = self.video_files[i]
+        # # Load the correct video
+        # video_path = self.video_files[i]
 
 
-        # Using VideoReader to load frames as needed
-        video_reader = VideoReader(video_path, "video")
-        frames = []
+        # # Using VideoReader to load frames as needed
+        # video_reader = VideoReader(video_path, "video")
+        # frames = []
         
-        # Select a starting point for the frame sequence
-        for j, frame in enumerate(video_reader):
+        # # Select a starting point for the frame sequence
+        # for j, frame in enumerate(video_reader):
             
-            if j==local_index:
-                frames.append(frame['data'])
-                break
+        #     if j==local_index:
+        #         frames.append(frame['data'])
+        #         break
         
        
-        frames = torch.stack(frames)  # Convert to [T, C, H, W]
+        # frames = torch.stack(frames)  # Convert to [T, C, H, W]
 
     
 
-        if self.transform:
-            frames = torch.stack([self.transform(frame) for frame in frames])
+        # if self.transform:
+        #     frames = torch.stack([self.transform(frame) for frame in frames])
 
         
         
-        return frames
+        # return frames
 
 
 
@@ -1016,16 +1078,6 @@ class TVSummDataset(Dataset):
 
 
 
-def get_transforms():
-    return transforms.Compose(
-        [   ToPILImage(),
-            transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(
-                mean=(0.48145466, 0.4578275, 0.40821073),
-                std=(0.26862954, 0.26130258, 0.27577711),
-            )])
 
 
 

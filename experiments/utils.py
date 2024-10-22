@@ -84,12 +84,19 @@ def load_datasets(args):
         test_seq_dataset = DataClass(
             data_folder=args.data_dir, split='test', single_image=False, triplet=False, seq_len=args.seq_len, cluster=args.cluster, **dataset_args)
 
+    # train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size,
+    #                                shuffle=True, pin_memory=True, drop_last=True, num_workers=args.num_workers, persistent_workers= True)
+    # val_seq_loader = data.DataLoader(val_seq_dataset, batch_size=args.batch_size,
+    #                               shuffle=False, drop_last=False, num_workers=args.num_workers, persistent_workers= True)
+    # test_seq_loader = data.DataLoader(test_seq_dataset, batch_size=args.batch_size,
+    #                               shuffle=False, drop_last=False, num_workers=args.num_workers, persistent_workers= True)
+
     train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size,
-                                   shuffle=True, pin_memory=True, drop_last=True, num_workers=args.num_workers)
+                                   shuffle=True,pin_memory=True, drop_last=True, num_workers=args.num_workers, persistent_workers= True)
     val_seq_loader = data.DataLoader(val_seq_dataset, batch_size=args.batch_size,
-                                  shuffle=False, drop_last=False, num_workers=args.num_workers)
+                                  shuffle=False,pin_memory=True, drop_last=False, num_workers=args.num_workers, persistent_workers= True)
     test_seq_loader = data.DataLoader(test_seq_dataset, batch_size=args.batch_size,
-                                  shuffle=False, drop_last=False, num_workers=args.num_workers)
+                                  shuffle=False,pin_memory=True, drop_last=False, num_workers=args.num_workers, persistent_workers= True)
 
     print(f'Training dataset size: {len(train_dataset)} / {len(train_loader)}')
     print(f'Val sequence dataset size: {len(val_seq_dataset)} / {len(val_seq_loader)}')
@@ -186,25 +193,25 @@ def train_model(model_class, train_loader, val_loader,
     if progress_bar_refresh_rate == 0:
         trainer_args['enable_progress_bar'] = False
 
-    if callback_kwargs is None:
-        callback_kwargs = dict()
-    callbacks = model_class.get_callbacks(exmp_inputs=next(iter(val_loader)), cluster=cluster, 
-                                          **callback_kwargs)
-    if not debug:
-        callbacks.append(
-                ModelCheckpoint(save_weights_only=True, 
-                                mode="min", 
-                                monitor=val_track_metric,
-                                save_last=save_last_model,
-                                every_n_epochs=check_val_every_n_epoch)
-            )
-    if debug:
-        torch.autograd.set_detect_anomaly(True) 
+    # if callback_kwargs is None:
+    #     callback_kwargs = dict()
+    # callbacks = model_class.get_callbacks(exmp_inputs=next(iter(val_loader)), cluster=cluster, 
+    #                                       **callback_kwargs)
+    # if not debug:
+    #     callbacks.append(
+    #             ModelCheckpoint(save_weights_only=True, 
+    #                             mode="min", 
+    #                             monitor=val_track_metric,
+    #                             save_last=save_last_model,
+    #                             every_n_epochs=check_val_every_n_epoch)
+    #         )
+    # if debug:
+    #     torch.autograd.set_detect_anomaly(True) 
     trainer = pl.Trainer(default_root_dir=root_dir,
                          accelerator='gpu' if torch.cuda.is_available() else 'cpu', 
                          devices=1,
                          max_epochs=max_epochs,
-                         callbacks=callbacks,
+                         #callbacks=callbacks,
                          check_val_every_n_epoch=check_val_every_n_epoch,
                          gradient_clip_val=gradient_clip_val,
                          **trainer_args)
@@ -241,25 +248,27 @@ def train_model(model_class, train_loader, val_loader,
                 model = torch.compile(model)
             else:
                 print('Warning: PyTorch version does not support compilation. Skipping...')
+        print('before training!')
+        #trainer.checkpoint_callback.best_model_path
         trainer.fit(model, train_loader, val_loader)
-        model = model_class.load_from_checkpoint(
-            trainer.checkpoint_callback.best_model_path)  # Load best checkpoint after training
+        print('training done!')
+        #model = model_class.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)  # Load best checkpoint after training
 
-    if test_loader is not None:
-        model_paths = [(trainer.checkpoint_callback.best_model_path, "best")]
-        if save_last_model:
-            model_paths += [(trainer.checkpoint_callback.last_model_path, "last")]
-        for file_path, prefix in model_paths:
-            model = model_class.load_from_checkpoint(file_path)
-            test_result = trainer.test(model, dataloaders=test_loader, verbose=False)
-            test_result = test_result[0]
-            print('='*50)
-            print(f'Test results ({prefix}):')
-            print('-'*50)
-            for key in test_result:
-                print(key + ':', test_result[key])
-            print('='*50)
+    # if test_loader is not None:
+    #     model_paths = [(trainer.checkpoint_callback.best_model_path, "best")]
+    #     if save_last_model:
+    #         model_paths += [(trainer.checkpoint_callback.last_model_path, "last")]
+    #     for file_path, prefix in model_paths:
+    #         #model = model_class.load_from_checkpoint(file_path)
+    #         test_result = trainer.test(model, dataloaders=test_loader, verbose=False)
+    #         test_result = test_result[0]
+    #         print('='*50)
+    #         print(f'Test results ({prefix}):')
+    #         print('-'*50)
+    #         for key in test_result:
+    #             print(key + ':', test_result[key])
+    #         print('='*50)
 
-            log_file = os.path.join(trainer.logger.log_dir, f'test_results_{prefix}.json')
-            with open(log_file, 'w') as f:
-                json.dump(test_result, f, indent=4)
+    #         log_file = os.path.join(trainer.logger.log_dir, f'test_results_{prefix}.json')
+    #         with open(log_file, 'w') as f:
+    #             json.dump(test_result, f, indent=4)

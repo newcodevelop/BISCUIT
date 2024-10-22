@@ -22,6 +22,13 @@ if __name__ == '__main__':
 
     datasets, data_loaders, data_name = load_datasets(args)
 
+    for i in data_loaders['train']:
+        print(i)
+        print(len(i))
+        print(i[0].shape, i[1].shape)
+        print('hehe'*10)
+        break
+
     model_args['data_folder'] = [s for s in args.data_dir.split('/') if len(s) > 0][-1]
     model_args['img_width'] = datasets['train'].get_img_width()
     model_args['max_iters'] = args.max_epochs * len(data_loaders['train'])
