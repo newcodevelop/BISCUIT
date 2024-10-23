@@ -6,12 +6,13 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor
 from collections import defaultdict
-
+import numpy as np
 import sys
 sys.path.append('../')
 from models.shared import CosineWarmupScheduler, get_act_fn, Encoder, Decoder, SimpleEncoder, SimpleDecoder, VAESplit, ImageLogCallback, PermutationCorrelationMetricsLogCallback
 from models.shared import AutoregNormalizingFlow, gaussian_log_prob
 from models.shared import create_interaction_prior, InteractionVisualizationCallback
+import cv2
 
 
 class BISCUITVAE(pl.LightningModule):
@@ -219,9 +220,27 @@ class BISCUITVAE(pl.LightningModule):
         p_mean = p1_mean-p2_mean
         p_std = p1_std-p2_std
 
+
+        print('sample diff.')
+
+        #print('random')
+
+        #mc = 0.5 # mixture coeff.
+        #p_mean = mc*p1_mean + (1-mc)*p2_mean
+        #p_std = torch.sqrt(mc*p1_std.exp() + (1-mc)*p2_std.exp() + mc*(1-mc)* ((p1_mean-p2_mean)**2))
+        
+
+
         p_sample = p_mean + torch.randn_like(p_mean) * p_std.exp()
+        
+        #p_sample = p_mean
 
         action = self.proj(p_sample).unsqueeze(dim=1)
+
+        
+
+
+        #action = torch.randn(imgs.shape[0],1,self.hparams.action_size).to('cuda')
 
         #print(p_sample.shape, action.shape)
         # print(0/0)
@@ -316,8 +335,8 @@ class BISCUITVAE(pl.LightningModule):
         loss = (kld_t1_all + rec_loss.sum(dim=1)).mean()
         loss = loss / (imgs.shape[1] - 1)
 
-        print('Loss', loss)
-
+        print(f'{mode}_kld_t1', kld_t1_all.mean() / (imgs.shape[1]-1))
+        print(f'{mode}_rec_loss_t1', rec_loss.mean())
         print('*'*20)
 
         # Logging
@@ -334,7 +353,57 @@ class BISCUITVAE(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         # Validation/Testing with correlation matrices done via callbacks
+        #print(batch)
+        print(batch_idx)
+        #print(batch[0].shape)
+        
         loss = self._get_loss(batch, mode='val')
+        z_mean, z_logstd = self.encoder(batch[0].flatten(0, 1))
+        z_sample = z_mean + torch.randn_like(z_mean) * z_logstd.exp()
+        decoder_inp = z_sample.unflatten(0, batch[0].shape[:2])[:,1:].flatten(0, 1)
+
+        #print('decoder inp shape', decoder_inp.shape)
+
+        if self.hparams.decoder_latents != self.hparams.num_latents:
+            decoder_inp = torch.cat([decoder_inp, action.flatten(0, 1)], dim=-1)
+
+        #print('decoder inp shape', decoder_inp.shape)
+
+        
+        x_rec = self.decoder(decoder_inp)
+
+        # Assuming your tensor is called `video_tensor`
+        video_tensor =  x_rec.detach()
+
+        # Convert tensor from PyTorch format (C, H, W) to NumPy format (H, W, C)
+        video_np = video_tensor.permute(0, 2, 3, 1).cpu().numpy()
+
+        # Normalize the pixel values to [0, 255] (assuming the tensor is in range [-1, 1] or [0, 1])
+        video_np = (255 * (video_np - video_np.min()) / (video_np.max() - video_np.min())).astype(np.uint8)
+
+        # Video parameters
+        height, width, channels = video_np[0].shape
+        fps = 30  # Frames per second
+        output_file = '/Data/dibyanayan/CRL/BISCUIT/outputs/fragments/output_video_{}.mp4'.format(batch_idx)
+
+        # Define the codec and create a VideoWriter object
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Use 'mp4v' codec for MP4 format
+        video_writer = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
+
+        # Write each frame to the video file
+        for frame in video_np:
+            print(frame)
+            video_writer.write(frame)
+
+        # Release the video writer
+        video_writer.release()
+
+        print(f"Video saved as {output_file}")
+
+
+        #print(x_rec.shape)
+        # print(0/0)
+
         self.log('val_loss', loss)
         return loss
 
