@@ -26,8 +26,8 @@ import os
 
 clips = []
 
-for i in range(len(os.listdir('/Data/dibyanayan/CRL/BISCUIT/outputs/fragments/')))[236:400]:
-    v_path = os.path.join('/Data/dibyanayan/CRL/BISCUIT/outputs/fragments/output_video_{}.mp4'.format(i))
+for i in range(len(os.listdir('/Data/dibyanayan/CRL/repo/BISCUIT/outputs/fragments/')))[236:400]:
+    v_path = os.path.join('/Data/dibyanayan/CRL/repo/BISCUIT/outputs/fragments/output_video_{}.mp4'.format(i))
     
     try:
         v_file = VideoFileClip(v_path)
@@ -41,5 +41,5 @@ for i in range(len(os.listdir('/Data/dibyanayan/CRL/BISCUIT/outputs/fragments/')
 final_clip = concatenate_videoclips(clips, method='compose')
 
 
-final_clip.write_videofile(os.path.join('/Data/dibyanayan/CRL/BISCUIT/outputs/fragments/', "final.mp4"), fps=24, remove_temp=False)
+final_clip.write_videofile(os.path.join('/Data/dibyanayan/CRL/repo/BISCUIT/outputs/fragments/', "final.mp4"), fps=24, remove_temp=False)
 

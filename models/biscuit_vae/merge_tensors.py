@@ -20,15 +20,15 @@ def find_box(video_dir):
 
     return box_sizes
     
-box_sizes = find_box('/Data/dibyanayan/CRL/BISCUIT/data/tvsumm/ydata-tvsum50-v1_1/video/')
+box_sizes = find_box('/Data/dibyanayan/CRL/repo/BISCUIT/data/tvsumm/ydata-tvsum50-v1_1/video/')
 
 print(box_sizes)
 
 
 clips = []
 
-for i in range(len(os.listdir('/Data/dibyanayan/CRL/BISCUIT/outputs/fragments_nf_latent/'))):
-    t_path = os.path.join('/Data/dibyanayan/CRL/BISCUIT/outputs/fragments_nf_latent/causal_latent_{}.pt'.format(i))
+for i in range(len(os.listdir('/Data/dibyanayan/CRL/repo/BISCUIT/outputs/fragments_nf_latent/'))):
+    t_path = os.path.join('/Data/dibyanayan/CRL/repo/BISCUIT/outputs/fragments_nf_latent/causal_latent_{}.pt'.format(i))
     clips.append(torch.load(t_path))
 
 clips = torch.cat(clips, dim=0)
@@ -41,7 +41,7 @@ print(first_clip.shape, second_clip.shape)
 
 
 
-frames = torch.load('/Data/dibyanayan/CRL/BISCUIT/experiments/all_frames_tvsumm.pt')
+frames = torch.load('/Data/dibyanayan/CRL/repo/BISCUIT/experiments/all_frames_tvsumm.pt')
 
 first_frame, second_frame = frames[:box_sizes[0], :],  frames[box_sizes[0]:, :]
 
@@ -148,7 +148,7 @@ def get_video_summ_extractive(video_tensor, batch_idx):
     # Video parameters
     height, width, channels = video_np[0].shape
     fps = 30  # Frames per second
-    output_file = '/Data/dibyanayan/CRL/BISCUIT/outputs/summ_extractive/{}.mp4'.format(batch_idx)
+    output_file = '/Data/dibyanayan/CRL/repo/BISCUIT/outputs/summ_extractive/{}.mp4'.format(batch_idx)
 
     # Define the codec and create a VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Use 'mp4v' codec for MP4 format

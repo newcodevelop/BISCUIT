@@ -475,7 +475,7 @@ class BISCUITVAE(pl.LightningModule):
         # loss = self._get_loss(batch, mode='train')
         # print(loss)
         # print(0/0)
-        if self.current_epoch<=1:
+        if self.current_epoch<=100:
             print('in the vae training step')   
             loss = self._get_loss(batch, mode='train')
             
@@ -503,7 +503,7 @@ class BISCUITVAE(pl.LightningModule):
 
         #print('decoder inp shape', decoder_inp.shape)
 
-        torch.save(decoder_inp.detach().cpu(), '/Data/dibyanayan/CRL/BISCUIT/outputs/fragments_nf_latent/causal_latent_{}.pt'.format(batch_idx))
+        torch.save(decoder_inp.detach().cpu(), '/Data/dibyanayan/CRL/repo/BISCUIT/outputs/fragments_nf_latent/causal_latent_{}.pt'.format(batch_idx))
 
         #print(0/0)
 
@@ -522,7 +522,7 @@ class BISCUITVAE(pl.LightningModule):
         # Video parameters
         height, width, channels = video_np[0].shape
         fps = 30  # Frames per second
-        output_file = '/Data/dibyanayan/CRL/BISCUIT/outputs/fragments_nf/output_video_{}.mp4'.format(batch_idx)
+        output_file = '/Data/dibyanayan/CRL/repo/BISCUIT/outputs/fragments_nf/output_video_{}.mp4'.format(batch_idx)
 
         # Define the codec and create a VideoWriter object
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Use 'mp4v' codec for MP4 format
